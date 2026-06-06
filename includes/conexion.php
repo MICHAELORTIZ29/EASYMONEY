@@ -1,8 +1,8 @@
 <?php
 $host = "localhost";
-$usuario = "root";
-$clave = "";
-$bd = "control_creditos";
+$usuario = "miorpaco_admin";
+$clave = "P7XQ5mdav9";
+$bd = "miorpaco_control_creditos";
 
 $conexion = new mysqli($host, $usuario, $clave, $bd);
 
