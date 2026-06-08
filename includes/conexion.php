@@ -1,7 +1,7 @@
 <?php
 $host = "localhost";
-$usuario = "miorpaco_admin";
-$clave = "P7XQ5mdav9";
+$usuario = "root";
+$clave = "";
 $bd = "miorpaco_control_creditos";
 
 $conexion = new mysqli($host, $usuario, $clave, $bd);

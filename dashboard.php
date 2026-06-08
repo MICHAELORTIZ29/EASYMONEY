@@ -92,6 +92,10 @@ $filtroSQL
 ";
 $totalMora = mysqli_fetch_assoc(mysqli_query($conexion, $sqlMora))['total_mora'] ?? 0;
 
+/* ================= TOTAL EGRESOS ================= */
+$sqlEgresos = "SELECT SUM(monto) AS total_egresos FROM egresos";
+$totalEgresos = mysqli_fetch_assoc(mysqli_query($conexion, $sqlEgresos))['total_egresos'] ?? 0;
+
 /* ================= EJECUTAR ================= */
 $totalCapital = mysqli_fetch_assoc(mysqli_query($conexion, $sqlCapital))['total_capital'] ?? 0;
 $totalGanancia = mysqli_fetch_assoc(mysqli_query($conexion, $sqlGanancia))['total_ganancia'] ?? 0;
@@ -104,8 +108,8 @@ $totalPendiente = mysqli_fetch_assoc(mysqli_query($conexion, $sqlPendiente))['to
 $sqlInversionGeneral = "SELECT SUM(monto) AS total_inversion FROM inversion_general";
 $totalInversionGeneral = mysqli_fetch_assoc(mysqli_query($conexion, $sqlInversionGeneral))['total_inversion'] ?? 0;
 
-/* ================= CAPITAL DISPONIBLE ================= */
-$capitalDisponible = ($totalInversionGeneral - $totalCapital) + $totalPagado;
+/* ================= CAPITAL DISPONIBLE (restando egresos) ================= */
+$capitalDisponible = ($totalInversionGeneral - $totalCapital) + $totalPagado - $totalEgresos;
 ?>
 
 <!DOCTYPE html>
@@ -173,7 +177,6 @@ $capitalDisponible = ($totalInversionGeneral - $totalCapital) + $totalPagado;
         </div>
 
         <!-- TARJETAS -->
-        <!-- TARJETAS -->
         <div class="row g-4">
 
             <div class="col-md-3">
@@ -235,30 +238,32 @@ $capitalDisponible = ($totalInversionGeneral - $totalCapital) + $totalPagado;
                 </div>
             </div>
 
+            <!-- NUEVA TARJETA: TOTAL EGRESOS -->
+            <div class="col-md-3">
+                <div class="card text-bg-secondary shadow h-100">
+                    <div class="card-body">
+                        <h6><i class="bi bi-cash"></i> Total Egresos</h6>
+                        <p class="fs-4">S/ <?= number_format($totalEgresos, 2) ?></p>
+                        <small class="opacity-75">Gastos operativos</small>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div class="quick-actions">
             <h3 class="mb-3 text-center">Acciones Rápidas</h3>
             <div class="row justify-content-center g-3">
-                <div class="col-md-3 d-grid"><a href="cliente_agregar.php" class="btn btn-primary btn-lg">Agregar
-                        Cliente</a></div>
-                <div class="col-md-3 d-grid"><a href="ventas_agregar.php" class="btn btn-success btn-lg">Registrar
-                        Crédito</a></div>
-                <div class="col-md-3 d-grid"><a href="pagos_gestionar.php" class="btn btn-warning btn-lg">Gestionar
-                        Pagos</a></div>
-                <div class="col-md-3 d-grid"><a href="clientes_listado.php" class="btn btn-info btn-lg">Listado
-                        Clientes</a></div>
-                <div class="col-md-3 d-grid"><a href="reporte_pagos.php" class="btn btn-dark btn-lg">Ver Reporte de
-                        Pagos</a></div>
-                <div class="col-md-3 d-grid"><a href="inversion_general.php" class="btn btn-secondary btn-lg"> Inversión
-                        General
-                    </a>
-                </div>
+                <div class="col-md-3 d-grid"><a href="cliente_agregar.php" class="btn btn-primary btn-lg">Agregar Cliente</a></div>
+                <div class="col-md-3 d-grid"><a href="ventas_agregar.php" class="btn btn-success btn-lg">Registrar Crédito</a></div>
+                <div class="col-md-3 d-grid"><a href="pagos_gestionar.php" class="btn btn-warning btn-lg">Gestionar Pagos</a></div>
+                <div class="col-md-3 d-grid"><a href="clientes_listado.php" class="btn btn-info btn-lg">Listado Clientes</a></div>
+                <div class="col-md-3 d-grid"><a href="reporte_pagos.php" class="btn btn-dark btn-lg">Ver Reporte de Pagos</a></div>
+                <div class="col-md-3 d-grid"><a href="inversion_general.php" class="btn btn-secondary btn-lg">Inversión General</a></div>
+                <!-- NUEVO BOTÓN: GESTIONAR EGRESOS -->
+                <div class="col-md-3 d-grid"><a href="gestionar_egresos.php" class="btn btn-danger btn-lg"><i class="bi bi-cash"></i> Gestionar Egresos</a></div>
             </div>
         </div>
-    </div>
-
-
     </div>
 
     <script>

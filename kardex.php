@@ -50,6 +50,8 @@ $listaUsuarios = mysqli_fetch_all($resUsuarios, MYSQLI_ASSOC);
 
 /* ================= QUERY KARDEX ================= */
 // SALIDAS = préstamos registrados (ventas)
+/* ================= QUERY KARDEX ================= */
+// SALIDAS = préstamos registrados (ventas) + EGRESOS
 // ENTRADAS = pagos recibidos de clientes
 $sqlKardex = "
 SELECT 
@@ -91,6 +93,24 @@ FROM pagos p
 INNER JOIN ventas v ON p.venta_id = v.id
 INNER JOIN clientes c ON v.cliente_id = c.id
 LEFT JOIN usuarios u ON u.usuario = IFNULL(p.usuario_registro, 'admin')
+
+UNION ALL
+
+SELECT 
+    e.fecha_egreso                             AS fecha_mov,
+    'salida'                                   AS tipo,
+    u.usuario                                  AS usuario_registro,
+    'EGRESO'                                   AS cliente_nombre,
+    ''                                         AS cliente_dni,
+    CONCAT('EGRESO: ', e.nombre)               AS concepto,
+    'egreso'                                   AS tipo_venta,
+    e.monto                                    AS monto,
+    0                                          AS mora,
+    e.id                                       AS ref_id,
+    'egreso'                                   AS ref_tipo,
+    IFNULL(e.created_at, CONCAT(e.fecha_egreso, ' 00:00:00')) AS created_at
+FROM egresos e
+LEFT JOIN usuarios u ON u.usuario = IFNULL(e.usuario_registro, 'admin')
 ";
 
 // Envolver en subquery para aplicar filtros
@@ -382,12 +402,12 @@ $totalMoras    = array_sum(array_map(fn($m) => (float)$m['mora'], $movimientos))
                     </thead>
                     <tbody>
                         <!-- FILA SALDO INICIAL -->
-                        <tr class="saldo-inicial-row">
+                        <!-- <tr class="saldo-inicial-row">
                             <td colspan="10" class="text-center">
                                 <i class="bi bi-bank me-1"></i> Saldo inicial — Inversión General
                             </td>
                             <td class="text-end">S/ <?= number_format($saldoInicial, 2) ?></td>
-                        </tr>
+                        </tr> -->
 
                         <?php if (empty($movimientos)): ?>
                             <tr>
