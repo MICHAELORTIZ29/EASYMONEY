@@ -115,7 +115,7 @@ $historial = mysqli_query(
 
     <div class="container mt-4">
 
-        <h3 class="text-center mb-4">💰 Inversión General Easy Money</h3>
+        <h3 class="text-center mb-4">Inversión General Easy Money</h3>
 
         <!-- MENSAJE -->
         <?php if ($mensaje): ?>

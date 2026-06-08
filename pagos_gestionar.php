@@ -416,7 +416,7 @@ if ($cliente_id && $cliente_id > 0) {
     </nav>
 
     <div class="container mt-4" style="max-width: 1200px;">
-        <h2 class="mb-4">💰 Gestión de Pagos</h2>
+        <h2 class="mb-4">Gestión de Pagos</h2>
 
         <?php if ($mensaje): ?>
             <div class="alert alert-info alert-dismissible fade show" role="alert">
@@ -464,7 +464,7 @@ if ($cliente_id && $cliente_id > 0) {
             </div>
 
             <!-- Préstamos en Efectivo -->
-            <h5 class="mt-4"><i class="bi bi-cash-stack"></i> 💵 Préstamos en Efectivo</h5>
+            <h5 class="mt-4"><i class="bi bi-cash-stack"></i>Préstamos en Efectivo</h5>
             <?php if (count($ventasEfectivo) === 0): ?>
                 <div class="alert alert-success">✅ No hay préstamos en efectivo registrados.</div>
             <?php else: ?>
@@ -525,7 +525,7 @@ if ($cliente_id && $cliente_id > 0) {
             <?php endif; ?>
 
             <!-- Préstamos por Artefacto -->
-            <h5 class="mt-5"><i class="bi bi-box-seam"></i> 📦 Préstamos por Artefacto</h5>
+            <h5 class="mt-5"><i class="bi bi-box-seam"></i>Préstamos por Artefacto</h5>
             <?php if (count($ventasArtefacto) === 0): ?>
                 <div class="alert alert-success">✅ No hay artefactos registrados.</div>
             <?php else: ?>
@@ -586,7 +586,7 @@ if ($cliente_id && $cliente_id > 0) {
             <?php endif; ?>
 
             <!-- Historial de pagos -->
-            <h4 class="mt-4"><i class="bi bi-clock-history"></i> 📜 Historial de pagos</h4>
+            <h4 class="mt-4"><i class="bi bi-clock-history"></i>Historial de pagos</h4>
             <div class="table-responsive">
                 <table class="table table-bordered table-striped">
                     <thead class="table-dark">
@@ -608,7 +608,7 @@ if ($cliente_id && $cliente_id > 0) {
                             <?php foreach ($pagos as $pago): ?>
                                 <tr>
                                     <td><?= htmlspecialchars($pago['producto']) ?></td>
-                                    <td><?= $pago['tipo_venta'] === 'artefacto' ? '📦 Artefacto' : '💵 Efectivo' ?></td>
+                                    <td><?= $pago['tipo_venta'] === 'artefacto' ? 'Artefacto' : 'Efectivo' ?></td>
                                     <td><?= htmlspecialchars($pago['fecha_pago']) ?></td>
                                     <td><?= htmlspecialchars($pago['metodo_pago']) ?></td>
                                     <td><?= number_format($pago['monto'], 2) ?></td>
@@ -662,15 +662,15 @@ if ($cliente_id && $cliente_id > 0) {
                 <div class="modal-body">
                     <input type="hidden" name="venta_id" id="venta_id_agregar" required>
                     <div class="mb-3">
-                        <label class="form-label">📦 Producto</label>
+                        <label class="form-label">Producto</label>
                         <input type="text" class="form-control" id="producto_agregar" disabled>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">📅 Fecha de Pago</label>
+                        <label class="form-label">Fecha de Pago</label>
                         <input type="date" class="form-control" name="fecha_pago" required value="<?= date('Y-m-d') ?>">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">💳 Método de Pago</label>
+                        <label class="form-label">Método de Pago</label>
                         <select class="form-select" name="metodo_pago" required>
                             <option value="">--Seleccione método--</option>
                             <option value="yape">Yape</option>
@@ -679,7 +679,7 @@ if ($cliente_id && $cliente_id > 0) {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">💰 Monto a pagar (S/)</label>
+                        <label class="form-label">Monto a pagar (S/)</label>
                         <input type="number" step="0.01" min="0.01" class="form-control" name="monto_pago" id="monto_pago" required>
                         <small id="deudaDisponible" class="form-text text-muted"></small>
                     </div>
