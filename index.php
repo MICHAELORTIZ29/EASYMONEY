@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <div class="d-flex align-items-center justify-content-center" style="height: 100vh;">
         <div class="login-card">
-            <img src="img/logo-shor.jpg" alt="Logo de la empresa" class="logo">
+            <img src="img/logo-shor.jpeg" alt="Logo de la empresa" class="logo">
             <h4 class="text-center mb-4">Iniciar Sesión</h4>
             
             <?php if ($error): ?>
