@@ -161,14 +161,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fecha_pago = $_POST['fecha_pago'];
         $metodo_pago = $_POST['metodo_pago'];
         $monto_pago = floatval($_POST['monto_pago']);
+        $monto_mora = isset($_POST['monto_mora']) && $_POST['monto_mora'] > 0 ? floatval($_POST['monto_mora']) : 0;
         $usuario_registro = $_POST['usuario_registro'];
         
         if ($pago_id > 0 && $fecha_pago && $metodo_pago && $monto_pago > 0 && $usuario_registro) {
-            $sqlUpdate = "UPDATE pagos SET fecha_pago = ?, metodo_pago = ?, monto = ?, usuario_registro = ? WHERE id = ?";
+            // Actualizar incluyendo la mora
+            $sqlUpdate = "UPDATE pagos SET fecha_pago = ?, metodo_pago = ?, monto = ?, mora = ?, usuario_registro = ? WHERE id = ?";
             $stmtU = mysqli_prepare($conexion, $sqlUpdate);
-            mysqli_stmt_bind_param($stmtU, 'ssdsi', $fecha_pago, $metodo_pago, $monto_pago, $usuario_registro, $pago_id);
+            mysqli_stmt_bind_param($stmtU, 'ssddsi', $fecha_pago, $metodo_pago, $monto_pago, $monto_mora, $usuario_registro, $pago_id);
+            
             if (mysqli_stmt_execute($stmtU)) {
-                $mensaje = "Pago actualizado correctamente. Nuevo usuario: " . $usuario_registro;
+                $mensaje = "Pago actualizado correctamente. Nuevo usuario: " . $usuario_registro . ", Mora: S/ " . number_format($monto_mora, 2);
                 // Obtener cliente_id para redirigir
                 $sqlGetCliente = "SELECT v.cliente_id FROM pagos p JOIN ventas v ON p.venta_id = v.id WHERE p.id = ?";
                 $stmtG = mysqli_prepare($conexion, $sqlGetCliente);
@@ -256,7 +259,7 @@ if ($cliente_id && $cliente_id > 0) {
 
 // Solo ejecutar consultas si hay un cliente válido
 if ($cliente_id && $cliente_id > 0) {
-    /* ================= EFECTIVO ================= */
+    /* ================= EFECTIVO - TODOS LOS CRÉDITOS (incluye pagados) ================= */
     $sqlEfectivo = "
         SELECT 
             v.id,
@@ -268,11 +271,16 @@ if ($cliente_id && $cliente_id > 0) {
             (v.monto + (v.monto * v.interes / 100)) AS monto_total,
             IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0) AS total_pagado,
             ((v.monto + (v.monto * v.interes / 100)) - 
-             IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) AS deuda
+             IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) AS deuda,
+            CASE 
+                WHEN ((v.monto + (v.monto * v.interes / 100)) - IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) <= 0 
+                THEN 'cancelado'
+                ELSE 'pendiente'
+            END AS estado
         FROM ventas v
         WHERE v.cliente_id = ?
           AND v.tipo_venta = 'efectivo'
-        HAVING deuda > 0
+        ORDER BY v.fecha_venta DESC
     ";
     
     $stmt = mysqli_prepare($conexion, $sqlEfectivo);
@@ -288,15 +296,25 @@ if ($cliente_id && $cliente_id > 0) {
     }
     unset($v);
     
-    /* ================= ARTEFACTO ================= */
+    /* ================= ARTEFACTO - TODOS LOS CRÉDITOS (incluye pagados) ================= */
     $sqlArtefacto = "
-        SELECT v.id, v.producto, v.precio_venta, v.fecha_venta, v.dias_credito,
+        SELECT 
+            v.id, 
+            v.producto, 
+            v.precio_venta, 
+            v.fecha_venta, 
+            v.dias_credito,
             IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0) AS total_pagado,
-            (v.precio_venta - IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) AS deuda
+            (v.precio_venta - IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) AS deuda,
+            CASE 
+                WHEN (v.precio_venta - IFNULL((SELECT SUM(p.monto) FROM pagos p WHERE p.venta_id = v.id),0)) <= 0 
+                THEN 'cancelado'
+                ELSE 'pendiente'
+            END AS estado
         FROM ventas v
         WHERE v.cliente_id = ?
         AND v.tipo_venta = 'artefacto'
-        HAVING deuda > 0
+        ORDER BY v.fecha_venta DESC
     ";
     $stmt = mysqli_prepare($conexion, $sqlArtefacto);
     mysqli_stmt_bind_param($stmt, 'i', $cliente_id);
@@ -352,7 +370,11 @@ if ($cliente_id && $cliente_id > 0) {
     <style>
         .table-responsive { overflow-x: auto; }
         .deuda-pendiente { color: rgb(255, 17, 41); font-weight: bold; }
+        .deuda-cancelada { color: #198754; font-weight: bold; }
         .retraso { color: #dc3545; font-weight: bold; }
+        .fila-cancelada { background-color: #e8f5e9; opacity: 0.85; }
+        .badge-cancelado { background-color: #198754; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; }
+        .badge-pendiente { background-color: #dc3545; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; }
         .search-container { position: relative; }
         .search-options {
             position: absolute;
@@ -444,31 +466,58 @@ if ($cliente_id && $cliente_id > 0) {
             <!-- Préstamos en Efectivo -->
             <h5 class="mt-4"><i class="bi bi-cash-stack"></i> 💵 Préstamos en Efectivo</h5>
             <?php if (count($ventasEfectivo) === 0): ?>
-                <div class="alert alert-success">✅ No hay préstamos en efectivo pendientes.</div>
+                <div class="alert alert-success">✅ No hay préstamos en efectivo registrados.</div>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover">
                         <thead class="table-dark">
-                            <tr><th>Producto</th><th>Fecha</th><th>Días Crédito</th><th>Retraso</th><th>Total</th><th>Pagado</th><th>Deuda</th><th>Acciones</th></tr>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Fecha</th>
+                                <th>Días Crédito</th>
+                                <th>Retraso</th>
+                                <th>Total</th>
+                                <th>Pagado</th>
+                                <th>Deuda</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($ventasEfectivo as $v): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($v['producto']) ?></td>
-                                <td><?= $v['fecha_venta'] ?></td>
-                                <td><?= $v['dias_credito'] ?></td>
-                                <td class="<?= $v['dias_retraso'] > 0 ? 'retraso' : '' ?>"><?= $v['dias_retraso'] ?></td>
-                                <td><?= number_format($v['monto_total'], 2) ?></td>
-                                <td><?= number_format($v['total_pagado'], 2) ?></td>
-                                <td class="deuda-pendiente"><?= number_format($v['deuda'], 2) ?></td>
-                                <td>
-                                    <button class="btn btn-success btn-sm" data-bs-toggle="modal"
-                                        data-bs-target="#modalAgregarPago" data-ventaid="<?= $v['id'] ?>"
-                                        data-producto="<?= htmlspecialchars($v['producto']) ?>" data-deuda="<?= $v['deuda'] ?>">
-                                        <i class="bi bi-cash-coin"></i> Pagar
-                                    </button>
-                                </td>
-                            </tr>
+                                <tr class="<?= $v['estado'] === 'cancelado' ? 'fila-cancelada' : '' ?>">
+                                    <td><?= htmlspecialchars($v['producto']) ?></td>
+                                    <td><?= $v['fecha_venta'] ?></td>
+                                    <td><?= $v['dias_credito'] ?></td>
+                                    <td class="<?= $v['dias_retraso'] > 0 && $v['estado'] !== 'cancelado' ? 'retraso' : '' ?>">
+                                        <?= $v['estado'] === 'cancelado' ? '—' : $v['dias_retraso'] ?>
+                                    </td>
+                                    <td><?= number_format($v['monto_total'], 2) ?></td>
+                                    <td><?= number_format($v['total_pagado'], 2) ?></td>
+                                    <td class="<?= $v['estado'] === 'cancelado' ? 'deuda-cancelada' : 'deuda-pendiente' ?>">
+                                        <?= number_format($v['deuda'], 2) ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($v['estado'] === 'cancelado'): ?>
+                                            <span class="badge-cancelado"><i class="bi bi-check-circle"></i> Cancelado</span>
+                                        <?php else: ?>
+                                            <span class="badge-pendiente"><i class="bi bi-hourglass"></i> Pendiente</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($v['estado'] !== 'cancelado'): ?>
+                                            <button class="btn btn-success btn-sm" data-bs-toggle="modal"
+                                                data-bs-target="#modalAgregarPago" data-ventaid="<?= $v['id'] ?>"
+                                                data-producto="<?= htmlspecialchars($v['producto']) ?>" data-deuda="<?= $v['deuda'] ?>">
+                                                <i class="bi bi-cash-coin"></i> Pagar
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn btn-secondary btn-sm" disabled>
+                                                <i class="bi bi-check-circle"></i> Completado
+                                            </button>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -478,31 +527,58 @@ if ($cliente_id && $cliente_id > 0) {
             <!-- Préstamos por Artefacto -->
             <h5 class="mt-5"><i class="bi bi-box-seam"></i> 📦 Préstamos por Artefacto</h5>
             <?php if (count($ventasArtefacto) === 0): ?>
-                <div class="alert alert-success">✅ No hay artefactos pendientes.</div>
+                <div class="alert alert-success">✅ No hay artefactos registrados.</div>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover">
                         <thead class="table-dark">
-                            <tr><th>Producto</th><th>Fecha</th><th>Días Crédito</th><th>Retraso</th><th>Precio Venta</th><th>Pagado</th><th>Deuda</th><th>Acciones</th></tr>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Fecha</th>
+                                <th>Días Crédito</th>
+                                <th>Retraso</th>
+                                <th>Precio Venta</th>
+                                <th>Pagado</th>
+                                <th>Deuda</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($ventasArtefacto as $v): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($v['producto']) ?></td>
-                                <td><?= $v['fecha_venta'] ?></td>
-                                <td><?= $v['dias_credito'] ?></td>
-                                <td class="<?= $v['dias_retraso'] > 0 ? 'retraso' : '' ?>"><?= $v['dias_retraso'] ?></td>
-                                <td><?= number_format($v['precio_venta'], 2) ?></td>
-                                <td><?= number_format($v['total_pagado'], 2) ?></td>
-                                <td class="deuda-pendiente"><?= number_format($v['deuda'], 2) ?></td>
-                                <td>
-                                    <button class="btn btn-success btn-sm" data-bs-toggle="modal"
-                                        data-bs-target="#modalAgregarPago" data-ventaid="<?= $v['id'] ?>"
-                                        data-producto="<?= htmlspecialchars($v['producto']) ?>" data-deuda="<?= $v['deuda'] ?>">
-                                        <i class="bi bi-cash-coin"></i> Pagar
-                                    </button>
-                                </td>
-                            </tr>
+                                <tr class="<?= $v['estado'] === 'cancelado' ? 'fila-cancelada' : '' ?>">
+                                    <td><?= htmlspecialchars($v['producto']) ?></td>
+                                    <td><?= $v['fecha_venta'] ?></td>
+                                    <td><?= $v['dias_credito'] ?></td>
+                                    <td class="<?= $v['dias_retraso'] > 0 && $v['estado'] !== 'cancelado' ? 'retraso' : '' ?>">
+                                        <?= $v['estado'] === 'cancelado' ? '—' : $v['dias_retraso'] ?>
+                                    </td>
+                                    <td><?= number_format($v['precio_venta'], 2) ?></td>
+                                    <td><?= number_format($v['total_pagado'], 2) ?></td>
+                                    <td class="<?= $v['estado'] === 'cancelado' ? 'deuda-cancelada' : 'deuda-pendiente' ?>">
+                                        <?= number_format($v['deuda'], 2) ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($v['estado'] === 'cancelado'): ?>
+                                            <span class="badge-cancelado"><i class="bi bi-check-circle"></i> Cancelado</span>
+                                        <?php else: ?>
+                                            <span class="badge-pendiente"><i class="bi bi-hourglass"></i> Pendiente</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($v['estado'] !== 'cancelado'): ?>
+                                            <button class="btn btn-success btn-sm" data-bs-toggle="modal"
+                                                data-bs-target="#modalAgregarPago" data-ventaid="<?= $v['id'] ?>"
+                                                data-producto="<?= htmlspecialchars($v['producto']) ?>" data-deuda="<?= $v['deuda'] ?>">
+                                                <i class="bi bi-cash-coin"></i> Pagar
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn btn-secondary btn-sm" disabled>
+                                                <i class="bi bi-check-circle"></i> Completado
+                                            </button>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -514,44 +590,54 @@ if ($cliente_id && $cliente_id > 0) {
             <div class="table-responsive">
                 <table class="table table-bordered table-striped">
                     <thead class="table-dark">
-                        <tr><th>Producto</th><th>Tipo</th><th>Fecha</th><th>Método</th><th>Monto (S/)</th><th>Mora (S/)</th><th>Registrado por</th><th>Acciones</th></tr>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Tipo</th>
+                            <th>Fecha</th>
+                            <th>Método</th>
+                            <th>Monto (S/)</th>
+                            <th>Mora (S/)</th>
+                            <th>Registrado por</th>
+                            <th>Acciones</th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php if (count($pagos) === 0): ?>
                             <tr><td colspan="8" class="text-center text-muted">❌ No hay pagos registrados</td></tr>
                         <?php else: ?>
                             <?php foreach ($pagos as $pago): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($pago['producto']) ?></td>
-                                <td><?= $pago['tipo_venta'] === 'artefacto' ? '📦 Artefacto' : '💵 Efectivo' ?></td>
-                                <td><?= htmlspecialchars($pago['fecha_pago']) ?></td>
-                                <td><?= htmlspecialchars($pago['metodo_pago']) ?></td>
-                                <td><?= number_format($pago['monto'], 2) ?></td>
-                                <td><?= $pago['mora'] > 0 ? '<span class="text-danger">S/ ' . number_format($pago['mora'], 2) . '</span>' : '—' ?></td>
-                                <td><span class="badge bg-secondary"><?= htmlspecialchars($pago['usuario_registro']) ?></span></td>
-                                <td class="text-nowrap">
-                                    <button class="btn btn-secondary btn-sm btnImprimirPago" data-pagoid="<?= $pago['id'] ?>">
-                                        <i class="bi bi-printer"></i>
-                                    </button>
-                                    <?php if ($is_admin): ?>
-                                        <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                                            data-bs-target="#modalEditarPago" 
-                                            data-pagoid="<?= $pago['id'] ?>"
-                                            data-fechapago="<?= $pago['fecha_pago'] ?>"
-                                            data-metodopago="<?= $pago['metodo_pago'] ?>" 
-                                            data-montopago="<?= $pago['monto'] ?>"
-                                            data-usuarioregistro="<?= $pago['usuario_registro'] ?>">
-                                            <i class="bi bi-pencil-square"></i>
+                                <tr>
+                                    <td><?= htmlspecialchars($pago['producto']) ?></td>
+                                    <td><?= $pago['tipo_venta'] === 'artefacto' ? '📦 Artefacto' : '💵 Efectivo' ?></td>
+                                    <td><?= htmlspecialchars($pago['fecha_pago']) ?></td>
+                                    <td><?= htmlspecialchars($pago['metodo_pago']) ?></td>
+                                    <td><?= number_format($pago['monto'], 2) ?></td>
+                                    <td><?= $pago['mora'] > 0 ? '<span class="text-danger fw-bold">S/ ' . number_format($pago['mora'], 2) . '</span>' : '—' ?></td>
+                                    <td><span class="badge bg-secondary"><?= htmlspecialchars($pago['usuario_registro']) ?></span></td>
+                                    <td class="text-nowrap">
+                                        <button class="btn btn-secondary btn-sm btnImprimirPago" data-pagoid="<?= $pago['id'] ?>">
+                                            <i class="bi bi-printer"></i>
                                         </button>
-                                        <form method="post" style="display:inline-block" onsubmit="return confirm('¿Eliminar este pago?');">
-                                            <input type="hidden" name="pago_id" value="<?= $pago['id'] ?>">
-                                            <button type="submit" name="eliminar_pago" class="btn btn-danger btn-sm">
-                                                <i class="bi bi-trash"></i>
+                                        <?php if ($is_admin): ?>
+                                            <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
+                                                data-bs-target="#modalEditarPago" 
+                                                data-pagoid="<?= $pago['id'] ?>"
+                                                data-fechapago="<?= $pago['fecha_pago'] ?>"
+                                                data-metodopago="<?= $pago['metodo_pago'] ?>" 
+                                                data-montopago="<?= $pago['monto'] ?>"
+                                                data-mora="<?= $pago['mora'] ?>"
+                                                data-usuarioregistro="<?= $pago['usuario_registro'] ?>">
+                                                <i class="bi bi-pencil-square"></i> Editar
                                             </button>
-                                        </form>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
+                                            <form method="post" style="display:inline-block" onsubmit="return confirm('¿Eliminar este pago?');">
+                                                <input type="hidden" name="pago_id" value="<?= $pago['id'] ?>">
+                                                <button type="submit" name="eliminar_pago" class="btn btn-danger btn-sm">
+                                                    <i class="bi bi-trash"></i> Eliminar
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </tbody>
@@ -619,7 +705,7 @@ if ($cliente_id && $cliente_id > 0) {
         </div>
     </div>
 
-    <!-- Modal Editar Pago (con campo para cambiar usuario) -->
+    <!-- Modal Editar Pago (con campo para cambiar usuario y mora) -->
     <div class="modal fade" id="modalEditarPago" tabindex="-1" aria-labelledby="modalEditarPagoLabel" aria-hidden="true">
         <div class="modal-dialog">
             <form method="post" class="modal-content">
@@ -644,8 +730,14 @@ if ($cliente_id && $cliente_id > 0) {
                     <div class="mb-3">
                         <label class="form-label">💰 Monto (S/)</label>
                         <input type="number" step="0.01" min="0.01" class="form-control" name="monto_pago" id="monto_pago_editar" required>
+                        <small class="form-text text-muted">Este monto se resta de la deuda principal</small>
                     </div>
                     <?php if ($is_admin): ?>
+                    <div class="mb-3">
+                        <label class="form-label">⚠️ Monto de Mora (S/)</label>
+                        <input type="number" step="0.01" min="0" class="form-control" name="monto_mora" id="monto_mora_editar" value="0">
+                        <small class="form-text text-warning">La mora es un cobro extra que NO reduce la deuda principal</small>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label"><i class="bi bi-person-badge"></i> 👤 Usuario que registró</label>
                         <select class="form-select" name="usuario_registro" id="usuario_registro_editar" required>
@@ -772,6 +864,9 @@ if ($cliente_id && $cliente_id > 0) {
                 document.getElementById('metodo_pago_editar').value = button.dataset.metodopago;
                 document.getElementById('monto_pago_editar').value = button.dataset.montopago;
                 <?php if ($is_admin): ?>
+                if (document.getElementById('monto_mora_editar')) {
+                    document.getElementById('monto_mora_editar').value = button.dataset.mora || 0;
+                }
                 if (document.getElementById('usuario_registro_editar')) {
                     document.getElementById('usuario_registro_editar').value = button.dataset.usuarioregistro;
                 }
